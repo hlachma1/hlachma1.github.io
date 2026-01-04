@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prediction Market Tracker</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #0a0a0a;
+            font-family: 'Courier New', monospace;
+            color: #00ff00;
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: #000;
+            padding: 20px;
+            border-bottom: 3px solid #00ff00;
+            box-shadow: 0 2px 10px rgba(0, 255, 0, 0.3);
+        }
+        
+        h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px #00ff00;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+        
+        .status {
+            color: #888;
+            font-size: 14px;
+        }
+        
+        label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        input {
+            background: #1a1a1a;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 8px 12px;
+            width: 120px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        
+        button {
+            background: #00ff00;
+            color: #000;
+            border: none;
+            padding: 8px 20px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        
+        button:hover {
+            background: #00cc00;
+            transform: translateY(-1px);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .bet-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .bet-card {
+            background: #111;
+            border: 1px solid #00ff00;
+            border-radius: 8px;
+            padding: 20px;
+            transition: all 0.3s;
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .bet-card:hover {
+            border-color: #00ff00;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        .bet-card.new {
+            animation: highlight 1s ease-in-out;
+        }
+        
+        @keyframes highlight {
+            0%, 100% {
+                background: #111;
+            }
+            50% {
+                background: #1a3a1a;
+            }
+        }
+        
+        .bet-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .bet-side {
+            font-size: 20px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .bet-side.buy {
+            color: #00ff00;
+        }
+        
+        .bet-side.sell {
+            color: #ff3333;
+        }
+        
+        .bet-size {
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 0 0 5px currentColor;
+        }
+        
+        .bet-market {
+            font-size: 16px;
+            color: #ccc;
+            margin-bottom: 10px;
+        }
+        
+        .bet-details {
+            display: flex;
+            gap: 20px;
+            font-size: 14px;
+            color: #888;
+        }
+        
+        .bet-price {
+            color: #00ff00;
+        }
+        
+        .bet-time {
+            color: #666;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+            font-size: 18px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 18px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 PREDICTION MARKET TRACKER</h1>
+        <div class="status" id="status">Initializing...</div>
+        <div class="controls">
+            <label>
+                Min Bet: $
+                <input type="number" id="minBet" value="10000" min="1000" step="1000">
+            </label>
+            <button onclick="updateMinBet()">Update Filter</button>
+            <button onclick="fetchData()">🔄 Refresh Now</button>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="bet-list" id="betList">
+            <div class="loading">📊 Loading prediction market data...</div>
+        </div>
+    </div>
+
+    <script>
+        let minBetSize = 10000;
+        let previousBets = [];
+        
+        async function fetchPolymarketBets() {
+            try {
+                const proxyUrl = 'https://api.allorigins.win/raw?url=';
+                const apiUrl = encodeURIComponent('https://clob.polymarket.com/trades?limit=100');
+                
+                const response = await fetch(proxyUrl + apiUrl);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const trades = await response.json();
+                const largeBets = [];
+                
+                const tradesArray = Array.isArray(trades) ? trades : (trades.data || []);
+                
+                for (const trade of tradesArray) {
+                    const betSize = parseFloat(trade.price || 0) * parseFloat(trade.size || 0);
+                    
+                    if (betSize >= minBetSize) {
+                        largeBets.push({
+                            id: trade.id || Math.random().toString(),
+                            market: trade.asset_id || 'Unknown Market',
+                            size: betSize,
+                            side: (trade.side || 'unknown').toUpperCase(),
+                            price: parseFloat(trade.price || 0),
+                            timestamp: trade.timestamp || new Date().toISOString()
+                        });
+                    }
+                }
+                
+                return largeBets;
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                return generateDemoData();
+            }
+        }
+        
+        function generateDemoData() {
+            const markets = [
+                'Trump wins 2024 Election',
+                'Bitcoin above $100k by EOY',
+                'Fed cuts rates in Q1',
+                'Recession in 2025',
+                'AI regulation passed',
+                'S&P 500 above 7000',
+                'Ethereum ETF approval',
+                'Housing market crash',
+                'NFL: Chiefs win Super Bowl',
+                'Apple releases AR glasses'
+            ];
+            
+            return markets.map((market, i) => ({
+                id: 'demo-' + i,
+                market: market,
+                size: Math.floor(Math.random() * 80000) + 10000,
+                side: Math.random() > 0.5 ? 'BUY' : 'SELL',
+                price: Math.random() * 0.8 + 0.2,
+                timestamp: new Date(Date.now() - Math.random() * 3600000).toISOString()
+            }));
+        }
+        
+        function formatTime(timestamp) {
+            try {
+                const date = new Date(timestamp);
+                const now = new Date();
+                const diffMs = now - date;
+                const diffMins = Math.floor(diffMs / 60000);
+                
+                if (diffMins < 1) return 'Just now';
+                if (diffMins < 60) return `${diffMins}m ago`;
+                const diffHours = Math.floor(diffMins / 60);
+                if (diffHours < 24) return `${diffHours}h ago`;
+                return date.toLocaleDateString();
+            } catch {
+                return 'Recently';
+            }
+        }
+        
+        function renderBets(bets) {
+            const betList = document.getElementById('betList');
+            
+            if (bets.length === 0) {
+                betList.innerHTML = '<div class="empty-state">No large bets found above $' + 
+                    minBetSize.toLocaleString() + '. Try lowering the minimum bet size.</div>';
+                return;
+            }
+            
+            // Sort by timestamp (newest first)
+            bets.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            
+            const previousIds = new Set(previousBets.map(b => b.id));
+            
+            betList.innerHTML = bets.map(bet => {
+                const sizeStr = '$' + bet.size.toLocaleString('en-US', {maximumFractionDigits: 0});
+                const emoji = bet.side === 'BUY' ? '🟢' : '🔴';
+                const sideClass = bet.side === 'BUY' ? 'buy' : 'sell';
+                const pricePct = (bet.price * 100).toFixed(1) + '%';
+                const isNew = !previousIds.has(bet.id);
+                
+                return `
+                    <div class="bet-card ${isNew ? 'new' : ''}">
+                        <div class="bet-header">
+                            <div class="bet-side ${sideClass}">
+                                <span>${emoji}</span>
+                                <span>${bet.side}</span>
+                            </div>
+                            <div class="bet-size">${sizeStr}</div>
+                        </div>
+                        <div class="bet-market">${bet.market}</div>
+                        <div class="bet-details">
+                            <span class="bet-price">Price: ${pricePct}</span>
+                            <span class="bet-time">${formatTime(bet.timestamp)}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            previousBets = bets;
+        }
+        
+        async function fetchData() {
+            const statusEl = document.getElementById('status');
+            
+            try {
+                statusEl.textContent = 'Fetching data...';
+                const bets = await fetchPolymarketBets();
+                
+                renderBets(bets);
+                
+                const now = new Date().toLocaleTimeString();
+                const dataSource = bets.length > 0 && bets[0].id.includes('demo') ? ' (Demo Data)' : '';
+                statusEl.textContent = `Last updated: ${now} | Showing ${bets.length} bets ≥ $${minBetSize.toLocaleString()}${dataSource}`;
+            } catch (error) {
+                console.error('Error:', error);
+                statusEl.textContent = 'Error fetching data - showing demo data';
+                const demoBets = generateDemoData();
+                renderBets(demoBets);
+            }
+        }
+        
+        function updateMinBet() {
+            const input = document.getElementById('minBet');
+            minBetSize = parseInt(input.value) || 10000;
+            fetchData();
+        }
+        
+        // Initial fetch
+        fetchData();
+        
+        // Auto-refresh every 30 seconds
+        setInterval(fetchData, 30000);
+        
+        // Handle Enter key in input
+        document.getElementById('minBet').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') updateMinBet();
+        });
+    </script>
+</body>
+</html>
